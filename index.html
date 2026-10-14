@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rolling Tenis</title>
+<meta name="description" content="Pengacak giliran main tenis double yang adil.">
+<meta name="theme-color" content="#EDF1F0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E171C" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icons/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Rolling Tenis">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap">
+<style>
+/* Layout: satu kolom sempit untuk HP di pinggir lapangan. Kartu lapangan (biru hard court) adalah satu-satunya blok berwarna penuh; sisanya netral. */
+:root {
+  --bg: #EDF1F0;
+  --surface: #FFFFFF;
+  --tint: #E3EAE8;
+  --ink: #11221E;
+  --muted: #587068;
+  --line: #CCD6D2;
+  --court: #285C8A;
+  --court-deep: #1F4F78;
+  --ball: #D7E84A;
+  --warn: #B5502A;
+  --ok: #25764B;
+  --display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --body: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E171C; --surface: #152128; --tint: #1B2A32; --ink: #E5EEEA; --muted: #8FA39D; --line: #27373F;
+    --court: #2F6EA2; --court-deep: #173F5F; --warn: #E08A62; --ok: #5CC28C;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E171C; --surface: #152128; --tint: #1B2A32; --ink: #E5EEEA; --muted: #8FA39D; --line: #27373F;
+  --court: #2F6EA2; --court-deep: #173F5F; --warn: #E08A62; --ok: #5CC28C;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; color-scheme: light; }
+body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--body); font-size: 16px; line-height: 1.45;
+  padding-block: calc(16px + env(safe-area-inset-top, 0px)) calc(48px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.app { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+h1, h2, h3, p { margin: 0; }
+h1 { font: 700 30px/1 var(--display); letter-spacing: .01em; text-transform: uppercase; }
+h2 { font: 700 20px/1.1 var(--display); letter-spacing: .04em; text-transform: uppercase; text-wrap: balance; }
+button, input { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px solid var(--court); outline-offset: 2px; }
+.sub { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--tint); padding: 4px; border-radius: 10px; }
+.tab { min-height: 44px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: 700 17px var(--display); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+.tab[aria-selected="true"] { background: var(--court); color: #fff; }
+
+section { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* kartu lapangan */
+.court { position: relative; background: var(--court-deep); color: #fff; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.court::before { content: ""; position: absolute; inset: 6px; border: 1.5px solid rgba(255,255,255,.28); border-radius: 6px; pointer-events: none; }
+.court > * { position: relative; }
+.court.next { background: var(--tint); color: var(--ink); }
+.court.next::before { border-color: var(--line); }
+.court-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tag { font: 700 15px var(--display); letter-spacing: .1em; text-transform: uppercase; display: inline-flex; align-items: center; gap: 8px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ball); display: inline-block; }
+.clock { font: 700 26px/1 var(--display); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.court-grid { display: grid; grid-template-columns: minmax(0, 1fr) 0 minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.net { border-left: 2px dashed rgba(255,255,255,.55); }
+.court.next .net { border-left-color: var(--line); }
+.side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.side.right { text-align: right; }
+.pl { font: 600 26px/1.1 var(--display); letter-spacing: .01em; overflow-wrap: anywhere; }
+.side-lbl { font: 600 12px var(--body); letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
+.serve { display: flex; flex-direction: column; gap: 6px; }
+.svs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.sv { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.12); border-radius: 6px; padding: 6px 8px; font-weight: 500; font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
+.court.next .sv { background: var(--surface); border: 1px solid var(--line); }
+.sv b { font: 700 15px var(--display); width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: none; background: var(--ball); color: #11221E; }
+
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 600; cursor: pointer; flex: 1 1 auto; }
+.btn.primary { background: var(--court); color: #fff; border-color: transparent; }
+.btn.big { min-height: 54px; font-size: 18px; }
+.btn.ghost { background: transparent; }
+.btn.warn { color: var(--warn); border-color: var(--warn); background: transparent; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.court .btn:not(.primary) { background: rgba(255,255,255,.14); border-color: transparent; color: #fff; }
+.court .btn.primary { background: var(--ball); color: #11221E; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; gap: 6px; align-items: baseline; padding: 6px 10px; border-radius: 999px; background: var(--tint); font-size: 15px; font-weight: 500; }
+.chip em { font: 600 14px var(--display); font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
+.empty { color: var(--muted); }
+
+label.fld { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 500; flex: 1 1 90px; min-width: 0; }
+input[type="number"], input[type="text"] { min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 0 12px; width: 100%; min-width: 0; font-variant-numeric: tabular-nums; }
+.est { display: flex; flex-direction: column; gap: 8px; font-size: 15px; }
+.pill { display: inline-block; font: 700 13px var(--display); letter-spacing: .08em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; border: 1.5px solid currentColor; }
+.pill.ok { color: var(--ok); }
+.pill.warn { color: var(--warn); }
+
+/* pemain */
+.plist { display: flex; flex-direction: column; }
+.prow { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.prow:first-child { border-top: 0; }
+.prow input[type="checkbox"] { width: 24px; height: 24px; accent-color: var(--court); margin: 0; }
+.prow.off input[type="text"] { opacity: .5; }
+.cnt { font: 600 17px var(--display); font-variant-numeric: tabular-nums; color: var(--muted); min-width: 34px; text-align: right; }
+.x { min-width: 44px; min-height: 44px; border: 0; background: transparent; color: var(--warn); font-size: 22px; cursor: pointer; border-radius: 8px; }
+.x[disabled] { visibility: hidden; }
+.note { background: var(--tint); border-radius: 8px; padding: 10px 12px; font-size: 14px; color: var(--muted); }
+
+/* statistik */
+details { border-top: 1px solid var(--line); }
+details:first-of-type { border-top: 0; }
+summary { list-style: none; cursor: pointer; padding: 10px 0; display: grid; grid-template-columns: minmax(0, 1fr) 72px 34px; gap: 10px; align-items: center; }
+summary::-webkit-details-marker { display: none; }
+.nm { font-weight: 600; overflow-wrap: anywhere; }
+.nm small { font-weight: 500; color: var(--muted); font-size: 13px; margin-left: 6px; }
+.bar { height: 8px; border-radius: 4px; background: var(--tint); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--court); border-radius: 4px; }
+.det { padding: 0 0 12px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+.det b { color: var(--ink); font-weight: 600; }
+.hist { display: flex; flex-direction: column; }
+.hrow { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 15px; align-items: baseline; }
+.hrow:first-child { border-top: 0; }
+.hno { font: 700 18px var(--display); color: var(--muted); font-variant-numeric: tabular-nums; }
+.hdur { font: 600 15px var(--display); color: var(--muted); font-variant-numeric: tabular-nums; }
+.vs { color: var(--muted); padding: 0 4px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn, .tab { transition: background-color .12s; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Rolling Tenis</h1>
+    <span class="sub" id="status"></span>
+    <button class="btn" id="install" type="button" hidden style="flex:0 0 auto;min-height:36px;padding:0 12px">Pasang di HP</button>
+  </header>
+  <nav class="tabs" role="tablist" aria-label="Bagian">
+    <button class="tab" role="tab" id="t-lap" data-tab="lap">Lapangan</button>
+    <button class="tab" role="tab" id="t-pl" data-tab="pl">Pemain</button>
+    <button class="tab" role="tab" id="t-st" data-tab="st">Statistik</button>
+  </nav>
+  <main id="view"></main>
+</div>
+<script>
+const Logic = (function () {
+  function key(a, b) { return a < b ? a + '-' + b : b + '-' + a; }
+  function sq(x) { return x * x; }
+  function gcd(a, b) { return b ? gcd(b, a % b) : a; }
+
+  // Hitung riwayat dari daftar match (match yang sedang main ikut dihitung).
+  function stats(matches) {
+    const plays = {}, last = {}, partner = {}, opp = {};
+    matches.forEach(function (m, i) {
+      m.a.concat(m.b).forEach(function (id) { plays[id] = (plays[id] || 0) + 1; last[id] = i; });
+      [m.a, m.b].forEach(function (t) { const k = key(t[0], t[1]); partner[k] = (partner[k] || 0) + 1; });
+      m.a.forEach(function (x) { m.b.forEach(function (y) { const k = key(x, y); opp[k] = (opp[k] || 0) + 1; }); });
+    });
+    return { plays: plays, last: last, partner: partner, opp: opp };
+  }
+
+  // Jumlah main efektif: main sungguhan + offset untuk yang datang telat / kembali.
+  function effPlays(p, st) { return (st.plays[p.id] || 0) + (p.offset || 0); }
+
+  function combos(arr, k) {
+    const out = [];
+    (function rec(start, cur) {
+      if (cur.length === k) { out.push(cur.slice()); return; }
+      for (let i = start; i < arr.length; i++) { cur.push(arr[i]); rec(i + 1, cur); cur.pop(); }
+    })(0, []);
+    return out;
+  }
+
+  const SPLITS = [[[0, 1], [2, 3]], [[0, 2], [1, 3]], [[0, 3], [1, 2]]];
+
+  // Dari 4 orang ada 3 cara membagi tim. Pilih yang partner & lawannya paling jarang terjadi.
+  function bestSplit(ids, st, rand) {
+    let best = null;
+    SPLITS.forEach(function (sp) {
+      const a = [ids[sp[0][0]], ids[sp[0][1]]], b = [ids[sp[1][0]], ids[sp[1][1]]];
+      let c = 10 * sq(st.partner[key(a[0], a[1])] || 0) + 10 * sq(st.partner[key(b[0], b[1])] || 0);
+      a.forEach(function (x) { b.forEach(function (y) { c += 3 * sq(st.opp[key(x, y)] || 0); }); });
+      c += rand() * 2;
+      if (!best || c < best.cost) best = { a: a, b: b, cost: c };
+    });
+    return best;
+  }
+
+  // Hukuman kalau pemain langsung main lagi tanpa istirahat.
+  function restCost(rest) {
+    if (rest === Infinity) return 0;
+    return rest === 0 ? 60 : rest === 1 ? 8 : rest === 2 ? 3 : 0;
+  }
+
+  function propose(players, matches, rand) {
+    rand = rand || Math.random;
+    const present = players.filter(function (p) { return p.present; });
+    if (present.length < 4) return null;
+    const st = stats(matches), n = matches.length;
+    const rows = present.map(function (p) {
+      return { id: p.id, eff: effPlays(p, st), rest: st.last[p.id] === undefined ? Infinity : n - 1 - st.last[p.id] };
+    });
+    const sorted = rows.slice().sort(function (x, y) { return x.eff - y.eff; });
+    const cutoff = sorted[3].eff;
+    const must = rows.filter(function (r) { return r.eff < cutoff; });
+    const opt = rows.filter(function (r) { return r.eff === cutoff; });
+    const k = 4 - must.length;
+    let best = null;
+    combos(opt, k).forEach(function (c) {
+      const grp = must.concat(c);
+      const sp = bestSplit(grp.map(function (r) { return r.id; }), st, rand);
+      let cost = sp.cost;
+      grp.forEach(function (r) { cost += restCost(r.rest) + rand() * 2; });
+      if (!best || cost < best.cost) best = { cost: cost, a: sp.a, b: sp.b };
+    });
+    // Urutan servis: tim bergantian tiap game, tiap pemain servis sekali.
+    const xa = rand() < 0.5 ? 0 : 1, xb = rand() < 0.5 ? 0 : 1;
+    const A = [best.a[xa], best.a[1 - xa]], B = [best.b[xb], best.b[1 - xb]];
+    const serve = rand() < 0.5 ? [A[0], B[0], A[1], B[1]] : [B[0], A[0], B[1], A[1]];
+    return { a: best.a, b: best.b, serve: serve };
+  }
+
+  function cycle(n) { return n / gcd(n, 4); }
+  function planFor(n, M) {
+    const total = 4 * M;
+    return { M: M, base: Math.floor(total / n), extra: total % n };
+  }
+
+  return { key: key, stats: stats, effPlays: effPlays, propose: propose, cycle: cycle, planFor: planFor };
+})();
+if (typeof module !== 'undefined') module.exports = Logic;
+
+(function () {
+  const KEY = 'rolling-tenis-v1';
+  const EXAMPLE = ['Andi', 'Budi', 'Citra', 'Dewi', 'Eko', 'Fajar', 'Gita', 'Hadi', 'Indra', 'Joko', 'Kiki', 'Lina'];
+
+  function defaults() {
+    return {
+      pid: EXAMPLE.length,
+      example: true,
+      players: EXAMPLE.map(function (n, i) { return { id: i + 1, name: n, present: true, offset: 0 }; }),
+      matches: [],
+      mid: 0,
+      next: null,
+      sewa: 120,
+      dmin: 15,
+      dmax: 20
+    };
+  }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (s && Array.isArray(s.players) && Array.isArray(s.matches)) return s;
+      }
+    } catch (e) { /* abaikan */ }
+    return null;
+  }
+
+  let S = load() || defaults();
+  let tab = 'lap';
+  let confirmKey = null;
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* abaikan */ } }
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function nf(n) { return String(Math.round(n * 10) / 10).replace('.', ','); }
+  function player(id) { return S.players.find(function (p) { return p.id === id; }); }
+  function name(id) { const p = player(id); return p ? p.name : '?'; }
+  function present() { return S.players.filter(function (p) { return p.present; }); }
+  function current() { return S.matches.find(function (m) { return !m.end; }) || null; }
+  function finished() { return S.matches.filter(function (m) { return m.end; }); }
+
+  function propose() { return Logic.propose(S.players, S.matches); }
+  function nextValid() {
+    const n = S.next;
+    if (!n) return false;
+    return n.a.concat(n.b).every(function (id) { const p = player(id); return p && p.present; });
+  }
+  function ensureNext() { if (!nextValid()) S.next = propose(); }
+  function sig(m) { return m ? [m.a.slice().sort().join(), m.b.slice().sort().join()].sort().join('|') : ''; }
+
+  function minEff(excludeId) {
+    const st = Logic.stats(S.matches);
+    const list = present().filter(function (p) { return p.id !== excludeId; });
+    if (!list.length) return 0;
+    return Math.min.apply(null, list.map(function (p) { return Logic.effPlays(p, st); }));
+  }
+  // Pemain yang datang telat / kembali mulai dari jumlah main terendah yang hadir, bukan dari nol.
+  function catchUpOffset(p) {
+    const st = Logic.stats(S.matches);
+    const mine = Logic.effPlays(p, st), mn = minEff(p.id);
+    if (mine < mn) p.offset = (p.offset || 0) + (mn - mine);
+  }
+
+  // ---------- aksi ----------
+  const actions = {
+    start: function () {
+      if (current()) return;
+      ensureNext();
+      if (!S.next) return;
+      S.mid += 1;
+      S.matches.push({ id: S.mid, a: S.next.a, b: S.next.b, serve: S.next.serve, start: Date.now(), end: null });
+      S.next = propose();
+    },
+    finish: function () { const m = current(); if (m) m.end = Date.now(); },
+    cancel: function () {
+      const m = current();
+      if (!m) return;
+      S.matches = S.matches.filter(function (x) { return x !== m; });
+      S.next = { a: m.a, b: m.b, serve: m.serve };
+    },
+    shuffle: function () {
+      const old = sig(S.next);
+      let cand = null;
+      for (let i = 0; i < 8; i++) { cand = propose(); if (!cand || sig(cand) !== old) break; }
+      S.next = cand;
+    },
+    clearnames: function () {
+      if (confirmKey !== 'clear') { confirmKey = 'clear'; return; }
+      confirmKey = null;
+      S.players = []; S.matches = []; S.next = null; S.example = false;
+    },
+    reset: function () {
+      if (confirmKey !== 'reset') { confirmKey = 'reset'; return; }
+      confirmKey = null;
+      S.matches = [];
+      S.players.forEach(function (p) { p.offset = 0; });
+      S.next = propose();
+    },
+    add: function () {
+      const inp = $('newName');
+      const v = inp ? inp.value.trim() : '';
+      if (!v) return;
+      S.pid += 1;
+      const p = { id: S.pid, name: v, present: true, offset: 0 };
+      S.players.push(p);
+      catchUpOffset(p);
+      S.next = propose();
+    },
+    del: function (id) {
+      const st = Logic.stats(S.matches);
+      if (st.plays[id]) return;
+      S.players = S.players.filter(function (p) { return p.id !== id; });
+      S.next = propose();
+    },
+    usewarn: function () {}
+  };
+
+  document.addEventListener('click', function (e) {
+    const t = e.target.closest('[data-tab],[data-act]');
+    if (!t) return;
+    if (t.dataset.tab) { tab = t.dataset.tab; confirmKey = null; render(); return; }
+    const act = t.dataset.act;
+    if (act !== 'clearnames' && act !== 'reset') confirmKey = null;
+    if (actions[act]) { actions[act](t.dataset.id ? parseInt(t.dataset.id, 10) : undefined); save(); render(); }
+  });
+
+  document.addEventListener('change', function (e) {
+    const t = e.target;
+    if (t.dataset.present) {
+      const p = player(parseInt(t.dataset.present, 10));
+      if (!p) return;
+      p.present = t.checked;
+      if (p.present) catchUpOffset(p);
+      S.next = propose();
+      save(); render();
+    } else if (t.dataset.rename) {
+      const p = player(parseInt(t.dataset.rename, 10));
+      const v = t.value.trim();
+      if (p && v) { p.name = v; save(); render(); }
+    }
+  });
+
+  document.addEventListener('submit', function (e) { e.preventDefault(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target.id === 'newName') { e.preventDefault(); actions.add(); save(); render(); const i = $('newName'); if (i) i.focus(); }
+  });
+
+  document.addEventListener('input', function (e) {
+    const id = e.target.id;
+    if (id === 'sewa' || id === 'dmin' || id === 'dmax') {
+      S[id] = parseFloat(e.target.value);
+      save();
+      const el = $('est');
+      if (el) el.innerHTML = estimateHtml();
+    }
+  });
+
+  // ---------- estimasi ----------
+  function estimateHtml() {
+    const n = present().length;
+    const sewa = S.sewa, dmin = S.dmin, dmax = S.dmax;
+    if (!(sewa > 0 && dmin > 0 && dmax >= dmin)) return '<p class="empty">Isi durasi sewa dan lama match (paling cepat tidak boleh lebih besar dari paling lama).</p>';
+    const lo = Math.floor(sewa / dmax), hi = Math.floor(sewa / dmin);
+    const out = [];
+    out.push('<p>Perkiraan <b>' + (lo === hi ? lo : lo + ' sampai ' + hi) + ' match</b> dalam ' + nf(sewa) + ' menit.</p>');
+    const done = finished();
+    const avg = done.length >= 2 ? done.reduce(function (s, m) { return s + (m.end - m.start); }, 0) / done.length / 60000 : 0;
+    if (avg >= 3) {
+      out.push('<p class="sub">Rata-rata match kalian sejauh ini ' + nf(avg) + ' menit, jadi sekitar ' + Math.floor(sewa / avg) + ' match.</p>');
+    }
+    if (n >= 4) {
+      const cyc = Logic.cycle(n);
+      const evens = [];
+      for (let m = Math.max(lo, 1); m <= hi; m++) if ((4 * m) % n === 0) evens.push(m);
+      if (evens.length) {
+        const m = evens[evens.length - 1];
+        out.push('<p><span class="pill ok">Pas rata</span> Berhenti di match ke-' + m + ': ' + n + ' pemain masing-masing main ' + (4 * m / n) + 'x.</p>');
+      } else {
+        const m = Math.max(1, Math.round((lo + hi) / 2));
+        const pl = Logic.planFor(n, m);
+        out.push('<p><span class="pill warn">Selisih 1</span> Di ' + m + ' match, ' + pl.extra + ' orang main ' + (pl.base + 1) + 'x dan ' + (n - pl.extra) + ' orang main ' + pl.base + 'x.</p>');
+      }
+      out.push('<p class="sub">Dengan ' + n + ' pemain hadir, hitungannya pas rata tiap kelipatan ' + cyc + ' match.</p>');
+    } else {
+      out.push('<p class="sub">Butuh minimal 4 pemain hadir.</p>');
+    }
+    return out.join('');
+  }
+
+  // ---------- tampilan ----------
+  function courtCard(m, kind) {
+    const side = function (ids, cls, lbl) {
+      return '<div class="side ' + cls + '"><span class="side-lbl">' + lbl + '</span>' + ids.map(function (id) { return '<div class="pl">' + esc(name(id)) + '</div>'; }).join('') + '</div>';
+    };
+    const sv = m.serve.map(function (id, i) { return '<span class="sv"><b>' + (i + 1) + '</b>' + esc(name(id)) + '</span>'; }).join('');
+    return '<div class="court ' + kind + '">' +
+      '<div class="court-top"><span class="tag">' + (kind === 'now' ? '<i class="dot"></i>Match ' + m.id + ' sedang main' : 'Berikutnya') + '</span>' +
+      (kind === 'now' ? '<span class="clock" id="clock" data-start="' + m.start + '">00:00</span>' : '') + '</div>' +
+      '<div class="court-grid">' + side(m.a, '', 'Tim A') + '<div class="net"></div>' + side(m.b, 'right', 'Tim B') + '</div>' +
+      '<div class="serve"><span class="side-lbl">Urutan servis, game 1 sampai 4</span><div class="svs">' + sv + '</div></div>' +
+      '</div>';
+  }
+
+  function viewLap() {
+    ensureNext();
+    const cur = current(), nx = S.next, out = [];
+    const n = present().length;
+    if (n < 4) {
+      out.push('<div class="card"><h2>Pemain kurang</h2><p class="empty">Minimal 4 pemain hadir untuk satu match double. Atur di tab Pemain.</p></div>');
+    }
+    if (cur) {
+      out.push(courtCard(cur, 'now'));
+      out.push('<div class="row"><button class="btn primary big" data-act="finish">Match selesai</button><button class="btn ghost" data-act="cancel">Batalkan</button></div>');
+    }
+    if (nx) {
+      out.push(courtCard(nx, 'next'));
+      out.push('<div class="row">' +
+        (cur ? '' : '<button class="btn primary big" data-act="start">Mulai match</button>') +
+        '<button class="btn" data-act="shuffle">Acak ulang</button></div>');
+    }
+    const used = {};
+    (cur ? cur.a.concat(cur.b) : []).concat(nx ? nx.a.concat(nx.b) : []).forEach(function (id) { used[id] = true; });
+    const st = Logic.stats(S.matches);
+    const rest = present().filter(function (p) { return !used[p.id]; }).sort(function (x, y) { return (st.plays[x.id] || 0) - (st.plays[y.id] || 0); });
+    out.push('<section><h2>Istirahat</h2>' + (rest.length
+      ? '<div class="chips">' + rest.map(function (p) { return '<span class="chip">' + esc(p.name) + '<em>' + (st.plays[p.id] || 0) + 'x</em></span>'; }).join('') + '</div>'
+      : '<p class="empty">Semua pemain sedang atau akan main.</p>') + '</section>');
+    out.push('<section><h2>Estimasi waktu</h2><div class="card">' +
+      '<div class="row">' +
+      '<label class="fld" for="sewa">Sewa lapangan (menit)<input type="number" inputmode="decimal" id="sewa" min="30" step="15" value="' + esc(S.sewa) + '"></label>' +
+      '<label class="fld" for="dmin">Match tercepat (menit)<input type="number" inputmode="decimal" id="dmin" min="5" step="0.5" value="' + esc(S.dmin) + '"></label>' +
+      '<label class="fld" for="dmax">Match terlama (menit)<input type="number" inputmode="decimal" id="dmax" min="5" step="0.5" value="' + esc(S.dmax) + '"></label>' +
+      '</div><div class="est" id="est">' + estimateHtml() + '</div></div></section>');
+    return out.join('');
+  }
+
+  function viewPl() {
+    const st = Logic.stats(S.matches), cur = current();
+    const inCur = cur ? cur.a.concat(cur.b) : [];
+    const out = [];
+    if (S.example) {
+      out.push('<div class="note">Nama di bawah ini contoh. Ganti dengan nama teman kalian, atau kosongkan semuanya dan tambah sendiri.' +
+        '<div class="row" style="margin-top:8px"><button class="btn ' + (confirmKey === 'clear' ? 'warn' : '') + '" data-act="clearnames">' + (confirmKey === 'clear' ? 'Yakin? Tap lagi untuk kosongkan' : 'Kosongkan semua nama') + '</button></div></div>');
+    }
+    out.push('<form class="card" id="addform" autocomplete="off"><h2>Tambah pemain</h2><div class="row">' +
+      '<input type="text" id="newName" placeholder="Nama pemain" aria-label="Nama pemain baru" style="flex:1 1 160px">' +
+      '<button type="button" class="btn primary" data-act="add" style="flex:0 0 auto">Tambah</button></div>' +
+      '<p class="sub">Pemain yang datang telat langsung masuk giliran dengan jumlah main setara yang paling sedikit di antara yang hadir.</p></form>');
+    out.push('<section><h2>Daftar pemain</h2><div class="card"><div class="plist">' + (S.players.length ? S.players.map(function (p) {
+      const plays = st.plays[p.id] || 0;
+      const removable = !plays && inCur.indexOf(p.id) < 0;
+      return '<div class="prow' + (p.present ? '' : ' off') + '">' +
+        '<input type="checkbox" data-present="' + p.id + '" ' + (p.present ? 'checked' : '') + ' aria-label="Hadir: ' + esc(p.name) + '">' +
+        '<input type="text" data-rename="' + p.id + '" value="' + esc(p.name) + '" aria-label="Nama pemain">' +
+        '<span class="cnt" title="Jumlah main">' + plays + 'x</span>' +
+        '<button class="x" data-act="del" data-id="' + p.id + '" aria-label="Hapus ' + esc(p.name) + '"' + (removable ? '' : ' disabled') + '>&times;</button></div>';
+    }).join('') : '<p class="empty">Belum ada pemain. Tambahkan di atas.</p>') + '</div></div>' +
+      '<p class="sub">Centang berarti hadir. Pemain yang pulang duluan cukup dicentang keluar, riwayatnya tetap tersimpan.</p></section>');
+    return out.join('');
+  }
+
+  function viewSt() {
+    const st = Logic.stats(S.matches), pres = present();
+    const out = [];
+    const effs = pres.map(function (p) { return Logic.effPlays(p, st); });
+    const spread = effs.length ? Math.max.apply(null, effs) - Math.min.apply(null, effs) : 0;
+    const maxPlays = Math.max.apply(null, [1].concat(S.players.map(function (p) { return st.plays[p.id] || 0; })));
+    out.push('<section><h2>Pemerataan main</h2><div class="card"><p>' + (spread <= 1
+      ? '<span class="pill ok">Adil</span> Selisih main antar pemain hadir paling banyak 1 match.'
+      : '<span class="pill warn">Timpang</span> Selisih main ' + spread + ' match.') + '</p>' +
+      (S.matches.length ? '' : '<p class="sub">Belum ada match. Angka akan muncul setelah match pertama dimulai.</p>') +
+      '<div>' + (S.players.length ? S.players.map(function (p) {
+        const plays = st.plays[p.id] || 0;
+        const others = S.players.filter(function (q) { return q.id !== p.id; });
+        const withP = [], without = [];
+        others.forEach(function (q) { const c = st.partner[Logic.key(p.id, q.id)] || 0; (c ? withP : without).push({ q: q, c: c }); });
+        const opps = others.map(function (q) { return { q: q, c: st.opp[Logic.key(p.id, q.id)] || 0 }; }).filter(function (x) { return x.c; });
+        let rest = '';
+        if (p.present && st.last[p.id] !== undefined) rest = 'Duduk ' + (S.matches.length - 1 - st.last[p.id]) + ' match sejak main terakhir. ';
+        else if (p.present) rest = 'Belum main. ';
+        return '<details><summary><span class="nm">' + esc(p.name) + (p.present ? '' : '<small>tidak hadir</small>') + (p.offset ? '<small>datang telat</small>' : '') + '</span>' +
+          '<span class="bar"><i style="width:' + Math.round(plays / maxPlays * 100) + '%"></i></span><span class="cnt">' + plays + 'x</span></summary>' +
+          '<div class="det"><p>' + rest + '</p>' +
+          '<p><b>Partner:</b> ' + (withP.length ? withP.map(function (x) { return esc(x.q.name) + (x.c > 1 ? ' (' + x.c + 'x)' : ''); }).join(', ') : 'belum ada') + '</p>' +
+          '<p><b>Belum jadi partner:</b> ' + (without.length ? without.map(function (x) { return esc(x.q.name); }).join(', ') : 'semua sudah') + '</p>' +
+          '<p><b>Lawan:</b> ' + (opps.length ? opps.map(function (x) { return esc(x.q.name) + (x.c > 1 ? ' (' + x.c + 'x)' : ''); }).join(', ') : 'belum ada') + '</p></div></details>';
+      }).join('') : '<p class="empty">Belum ada pemain.</p>') + '</div></div></section>');
+
+    const hist = S.matches.slice().reverse();
+    out.push('<section><h2>Riwayat match</h2><div class="card"><div class="hist">' + (hist.length ? hist.map(function (m) {
+      const dur = m.end ? Math.max(1, Math.round((m.end - m.start) / 60000)) + ' mnt' : 'main';
+      return '<div class="hrow"><span class="hno">' + m.id + '</span><span>' + m.a.map(function (i) { return esc(name(i)); }).join(' &amp; ') + '<span class="vs">vs</span>' + m.b.map(function (i) { return esc(name(i)); }).join(' &amp; ') + '</span><span class="hdur">' + dur + '</span></div>';
+    }).join('') : '<p class="empty">Belum ada match.</p>') + '</div></div></section>');
+
+    out.push('<div class="row"><button class="btn ' + (confirmKey === 'reset' ? 'warn' : 'ghost') + '" data-act="reset">' + (confirmKey === 'reset' ? 'Yakin? Tap lagi untuk hapus riwayat' : 'Mulai sesi baru (hapus riwayat)') + '</button></div>');
+    return out.join('');
+  }
+
+  function tickClock() {
+    const el = $('clock');
+    if (!el) return;
+    const s = Math.max(0, Math.floor((Date.now() - parseInt(el.dataset.start, 10)) / 1000));
+    el.textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  function render() {
+    ['lap', 'pl', 'st'].forEach(function (t) { $('t-' + t).setAttribute('aria-selected', String(t === tab)); });
+    $('view').innerHTML = tab === 'lap' ? viewLap() : tab === 'pl' ? viewPl() : viewSt();
+    $('status').textContent = present().length + ' hadir, ' + finished().length + ' match selesai';
+    tickClock();
+    save();
+  }
+
+  setInterval(tickClock, 1000);
+  render();
+})();
+
+</script>
+<script>
+(function () {
+  // Daftarkan service worker (hanya jalan di https atau localhost).
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () { /* abaikan */ });
+    });
+  }
+  // Tombol "Pasang" muncul di Chrome Android kalau aplikasi bisa dipasang.
+  let deferred = null;
+  const btn = document.getElementById('install');
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferred = e;
+    if (btn) btn.hidden = false;
+  });
+  if (btn) {
+    btn.addEventListener('click', function () {
+      if (!deferred) return;
+      deferred.prompt();
+      deferred.userChoice.then(function () { deferred = null; btn.hidden = true; });
+    });
+  }
+  window.addEventListener('appinstalled', function () { if (btn) btn.hidden = true; });
+})();
+
+</script>
+</body>
+</html>
